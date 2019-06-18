@@ -2,9 +2,14 @@
 #include <DHT.h>
 #include <MHZ19.h>
 #include <SparkFun_TLC5940.h>
+#include <SPI.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 
-#define INTERVAL_MSEC 5000
-unsigned long prev_msec = 0;
+#define INTERVAL_MSEC 10000
+unsigned long target_msec = INTERVAL_MSEC;
+unsigned long current_msec = 0;
 
 #define DHT22_DPIN 4
 DHT dht(DHT22_DPIN, DHT22);
@@ -17,19 +22,23 @@ SoftwareSerial swSerial(MHZ19B_RX, MHZ19B_TX); // RX, TX
 #define LED_LEVEL_MIN 0
 #define LED_LEVEL_MAX 100
 
-#define LED_CHANNEL_BASE_IDX 0
-#define LED_CHANNEL_START_IDX 1
-#define LED_CHANNEL_END_IDX 10
-#define LED_CHANNEL_COUNT 10
+#define LED_CHANNEL_START_IDX 0
+#define LED_CHANNEL_END_IDX 8
+#define LED_CHANNEL_COUNT 9
 
 int arrLevel[LED_CHANNEL_COUNT] = 
-	{ 0,					// blue, always on
-		0, 500, 600, 700,	// green, 1st always on
+	{ 	0, 500, 600, 700,	// green, 1st always on
 		800, 1000, 1500,	// yellow
 		2000, 4000			// red
 	};
-int arrChannel[LED_CHANNEL_COUNT] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+int arrChannel[LED_CHANNEL_COUNT] = { 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+#define LED_CHANNEL_STATUS 1	// blue
 
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 32 // OLED display height, in pixels
+
+#define OLED_RESET     -1 //4 // Reset pin # (or -1 if sharing Arduino reset pin)
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 #pragma region type
 struct DataMHZ19B
@@ -50,9 +59,10 @@ void setup()
 	Serial.begin(9600);
 	swSerial.begin(9600);
 
+	setupLED();
+	setupDisplay();
 	setupMHZ19B();
 	setupDHT22();
-	setupLED();
 }
 
 void setupMHZ19B()
@@ -72,6 +82,20 @@ void setupDHT22()
 void setupLED()
 {
 	Tlc.init();
+	Tlc.set(LED_CHANNEL_STATUS, LED_LEVEL_MAX);
+	Tlc.update();
+}
+
+void setupDisplay()
+{
+	if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3C for 128x32
+		Serial.println(F("SSD1306 allocation failed"));
+		for(;;); // Don't proceed, loop forever
+	}
+
+	display.clearDisplay();
+	display.cp437(true);
+	display.display();
 }
 
 #pragma endregion
@@ -92,13 +116,32 @@ void loop()
 	Serial.println();
 
 	printLED(dataMHZ19B);
+	printDisplay(dataMHZ19B, dataDHT22);
 }
 
 #pragma region time
+
 void delayAdjusted()
 {
-	unsigned long msec = millis();
-	unsigned long adjust_msec = msec - prev_msec;
+	current_msec = millis();
+	long adjust_msec = target_msec - current_msec;
+	if(adjust_msec < -INTERVAL_MSEC / 2)
+	{
+		adjust_msec = -INTERVAL_MSEC / 2;
+	}
+
+	/*Serial.print("target_msec=");
+	Serial.print(target_msec);
+	Serial.print(" msec=");
+	Serial.print(msec);
+	Serial.print(" adjust_msec=");
+	Serial.println(adjust_msec);*/
+
+
+	target_msec += INTERVAL_MSEC;
+	delay(INTERVAL_MSEC + adjust_msec);
+
+	/*unsigned long adjust_msec = msec - prev_msec;
 	if (adjust_msec > INTERVAL_MSEC)
 	{
 		adjust_msec -= INTERVAL_MSEC;
@@ -110,7 +153,7 @@ void delayAdjusted()
 
 	prev_msec = msec;
 
-	delay(INTERVAL_MSEC - adjust_msec);
+	delay(INTERVAL_MSEC - adjust_msec);*/
 }
 
 void printTimeStamp()
@@ -156,11 +199,11 @@ void printSerial(const struct DataDHT22& data)
 void printLED(const struct DataMHZ19B& data)
 {
 	// blue is always on
-	Tlc.set(arrChannel[LED_CHANNEL_BASE_IDX], LED_LEVEL_MAX);
+	Tlc.set(LED_CHANNEL_STATUS, LED_LEVEL_MIN);
 
 	for(int i = LED_CHANNEL_START_IDX; i <= LED_CHANNEL_END_IDX; ++i)
 	{
-		if(arrLevel[i] <= data.nCO2)
+		if(arrLevel[i] < data.nCO2)
 		{
 			Tlc.set(arrChannel[i], LED_LEVEL_MAX);
 		}
@@ -170,6 +213,35 @@ void printLED(const struct DataMHZ19B& data)
 		}
 	}
 	Tlc.update();
+}
+#pragma endregion
+
+#pragma region display
+void printDisplay(const struct DataMHZ19B& dataMHZ19B, const struct DataDHT22& dataDHT22)
+{
+	display.clearDisplay();
+
+	display.setTextSize(2);
+	display.setCursor(0, 0);
+	display.setTextColor(WHITE);
+	display.print(dataMHZ19B.nCO2);
+
+	int x = display.getCursorX();
+	int y = display.getCursorY();
+	display.setTextSize(1);
+	display.print("CO2");
+	display.setCursor(x, y + 8);
+	display.println("PPM\n");
+
+	display.print(dataDHT22.fTemp, 0);
+	display.print("C ");
+	display.print(dataDHT22.fHum, 0);
+	display.print("% ");
+
+	display.print(current_msec / 1000);
+	display.print("s");
+
+	display.display();
 }
 #pragma endregion
 
