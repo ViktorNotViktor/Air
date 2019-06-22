@@ -23,16 +23,16 @@ SoftwareSerial swSerial(MHZ19B_RX, MHZ19B_TX); // RX, TX
 #define LED_LEVEL_MAX 100
 
 #define LED_CHANNEL_START_IDX 0
-#define LED_CHANNEL_END_IDX 8
-#define LED_CHANNEL_COUNT 9
+#define LED_CHANNEL_END_IDX 9
+#define LED_CHANNEL_COUNT 10
 
 int arrLevel[LED_CHANNEL_COUNT] = 
-	{ 	0, 500, 600, 700,	// green, 1st always on
-		800, 1000, 1500,	// yellow
-		2000, 4000			// red
+	{ 	0,					// blue, always on
+		500, 600, 700, 800,	// green
+		1000, 1300, 1600,	// yellow
+		2000, 3000			// red
 	};
-int arrChannel[LED_CHANNEL_COUNT] = { 2, 3, 4, 5, 6, 7, 8, 9, 10 };
-#define LED_CHANNEL_STATUS 1	// blue
+int arrChannel[LED_CHANNEL_COUNT] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 32 // OLED display height, in pixels
@@ -82,8 +82,6 @@ void setupDHT22()
 void setupLED()
 {
 	Tlc.init();
-	Tlc.set(LED_CHANNEL_STATUS, LED_LEVEL_MAX);
-	Tlc.update();
 }
 
 void setupDisplay()
@@ -198,9 +196,6 @@ void printSerial(const struct DataDHT22& data)
 #pragma region LED
 void printLED(const struct DataMHZ19B& data)
 {
-	// blue is always on
-	Tlc.set(LED_CHANNEL_STATUS, LED_LEVEL_MIN);
-
 	for(int i = LED_CHANNEL_START_IDX; i <= LED_CHANNEL_END_IDX; ++i)
 	{
 		if(arrLevel[i] < data.nCO2)
