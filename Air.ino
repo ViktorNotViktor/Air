@@ -220,6 +220,7 @@ void printDisplay(const struct DataMHZ19B& dataMHZ19B, const struct DataDHT22& d
 	display.setCursor(0, 0);
 	display.setTextColor(WHITE);
 	display.print(dataMHZ19B.nCO2);
+	display.print(" ");
 
 	int x = display.getCursorX();
 	int y = display.getCursorY();
@@ -233,8 +234,25 @@ void printDisplay(const struct DataMHZ19B& dataMHZ19B, const struct DataDHT22& d
 	display.print(dataDHT22.fHum, 0);
 	display.print("% ");
 
-	display.print(current_msec / 1000);
-	display.print("s");
+	constexpr auto lDayFactor = 1000 * 60 * 60 * 24;
+	unsigned long lDays = current_msec / lDayFactor;
+	unsigned long lRemainedMsec = current_msec % lDayFactor;
+
+	constexpr auto lHourFactor = 1000 * 60 * 60;
+	unsigned long lHours = lRemainedMsec / lHourFactor;
+	lRemainedMsec = lRemainedMsec % lHourFactor;
+
+	constexpr auto lMinuteFactor = 1000 * 60;
+	unsigned long lMinutes = lRemainedMsec / lMinuteFactor;
+	lRemainedMsec = lRemainedMsec % lMinuteFactor;
+
+	constexpr auto lSecondFactor = 1000;
+	unsigned long lSeconds = lRemainedMsec / lSecondFactor;
+	
+	constexpr int nBufferSize = 16;
+	char szBuffer[nBufferSize];
+	snprintf(szBuffer, nBufferSize, "%lu %02lu:%02lu:%02lu", lDays, lHours, lMinutes, lSeconds);
+	display.print(szBuffer);
 
 	display.display();
 }
@@ -242,11 +260,12 @@ void printDisplay(const struct DataMHZ19B& dataMHZ19B, const struct DataDHT22& d
 
 /*
 Basic Pin setup:
-------------                                  ---u----
-ARDUINO   13|-> SCLK (pin 25)           OUT1 |1     28| OUT channel 0
-12|                           OUT2 |2     27|-> GND (VPRG)
-11|-> SIN (pin 26)            OUT3 |3     26|-> SIN (pin 11)
-10|-> BLANK (pin 23)          OUT4 |4     25|-> SCLK (pin 13)
+------------                       ---u----
+ARDUINO
+13|-> SCLK (pin 25)          OUT1 |1     28| OUT channel 0
+12|                          OUT2 |2     27|-> GND (VPRG)
+11|-> SIN (pin 26)           OUT3 |3     26|-> SIN (pin 11)
+10|-> BLANK (pin 23)         OUT4 |4     25|-> SCLK (pin 13)
 9|-> XLAT (pin 24)             .  |5     24|-> XLAT (pin 9)
 8|                             .  |6     23|-> BLANK (pin 10)
 7|                             .  |7     22|-> GND
