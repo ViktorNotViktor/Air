@@ -11,6 +11,8 @@
 unsigned long target_msec = INTERVAL_MSEC;
 unsigned long current_msec = 0;
 
+unsigned long current_step = 0;
+
 #define DHT22_DPIN 4
 DHT dht(DHT22_DPIN, DHT22);
 
@@ -26,17 +28,20 @@ SoftwareSerial swSerial(MHZ19B_RX, MHZ19B_TX); // RX, TX
 #define LED_CHANNEL_END_IDX 9
 #define LED_CHANNEL_COUNT 10
 
+// CO2 PPM levels
 int arrLevel[LED_CHANNEL_COUNT] = 
 	{ 	0,					// blue, always on
 		500, 600, 700, 800,	// green
 		1000, 1300, 1600,	// yellow
 		2000, 3000			// red
 	};
+// TLC5940 pins
 int arrChannel[LED_CHANNEL_COUNT] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 32 // OLED display height, in pixels
 
+//TODO: OLED reset?
 #define OLED_RESET     -1 //4 // Reset pin # (or -1 if sharing Arduino reset pin)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
@@ -70,7 +75,7 @@ void setupMHZ19B()
 	mhz.begin(swSerial);
 	//mhz.setRange();
 	//mhz.setSpan();
-	mhz.autoCalibration();
+	mhz.autoCalibration(); //TODO: false
 }
 
 void setupDHT22()
@@ -100,21 +105,40 @@ void setupDisplay()
 
 void loop() 
 {
-	delayAdjusted();
+	//delayAdjusted();
+	processButtons();
 
-	DataMHZ19B dataMHZ19B;
-	processMHZ19B(dataMHZ19B);
+	if(isIntervalElapsed())
+	{
+		DataMHZ19B dataMHZ19B;
+		processMHZ19B(dataMHZ19B);
 
-	DataDHT22 dataDHT22;
-	processDHT22(dataDHT22);
+		DataDHT22 dataDHT22;
+		processDHT22(dataDHT22);
 
-	printTimeStamp();
-	printSerial(dataMHZ19B);
-	printSerial(dataDHT22);
-	Serial.println();
+		printTimeStamp();
+		printSerial(dataMHZ19B);
+		printSerial(dataDHT22);
+		Serial.println();
 
-	printLED(dataMHZ19B);
-	printDisplay(dataMHZ19B, dataDHT22);
+		printLED(dataMHZ19B);
+		printDisplay(dataMHZ19B, dataDHT22);
+	}
+}
+
+bool isIntervalElapsed()
+{
+	//TODO: overflow control
+	current_msec = millis();
+	bool bResult = (current_msec >= current_step * INTERVAL_MSEC);
+	++current_step;
+	return bResult;
+}
+
+void processButtons()
+{
+	//TODO: if "Calibrate" button pressed
+	//mhz.calibrateZero();
 }
 
 #pragma region time
@@ -234,13 +258,9 @@ void printDisplay(const struct DataMHZ19B& dataMHZ19B, const struct DataDHT22& d
 	display.print(dataDHT22.fHum, 0);
 	display.print("% ");
 
-	constexpr auto lDayFactor = 1000 * 60 * 60 * 24;
-	unsigned long lDays = current_msec / lDayFactor;
-	unsigned long lRemainedMsec = current_msec % lDayFactor;
-
 	constexpr auto lHourFactor = 1000 * 60 * 60;
-	unsigned long lHours = lRemainedMsec / lHourFactor;
-	lRemainedMsec = lRemainedMsec % lHourFactor;
+	unsigned long lHours = current_msec / lHourFactor;
+	unsigned long lRemainedMsec = current_msec % lHourFactor;
 
 	constexpr auto lMinuteFactor = 1000 * 60;
 	unsigned long lMinutes = lRemainedMsec / lMinuteFactor;
@@ -251,7 +271,7 @@ void printDisplay(const struct DataMHZ19B& dataMHZ19B, const struct DataDHT22& d
 	
 	constexpr int nBufferSize = 16;
 	char szBuffer[nBufferSize];
-	snprintf(szBuffer, nBufferSize, "%lu %02lu:%02lu:%02lu", lDays, lHours, lMinutes, lSeconds);
+	snprintf(szBuffer, nBufferSize, "%02lu:%02lu:%02lu", lHours, lMinutes, lSeconds);
 	display.print(szBuffer);
 
 	display.display();
