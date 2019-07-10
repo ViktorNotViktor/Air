@@ -61,6 +61,8 @@ struct DataDHT22
 #pragma region setup
 void setup()
 {
+	delay(1000);
+
 	Serial.begin(9600);
 	swSerial.begin(9600);
 
@@ -131,7 +133,10 @@ bool isIntervalElapsed()
 	//TODO: overflow control
 	current_msec = millis();
 	bool bResult = (current_msec >= current_step * INTERVAL_MSEC);
-	++current_step;
+	if(bResult)
+	{
+		++current_step;
+	}
 	return bResult;
 }
 
@@ -180,6 +185,15 @@ void delayAdjusted()
 
 void printTimeStamp()
 {
+	/*Serial.println("WTF");
+	Serial.print(" current_step=");
+	Serial.print(current_step);
+	Serial.print(" current_msec=");
+	Serial.print(current_msec);
+	Serial.print(" mult=");
+	Serial.println(current_step * INTERVAL_MSEC);
+*/
+
 	Serial.print(millis() / 1000);
 	Serial.print(" sec, ");
 }
@@ -258,16 +272,9 @@ void printDisplay(const struct DataMHZ19B& dataMHZ19B, const struct DataDHT22& d
 	display.print(dataDHT22.fHum, 0);
 	display.print("% ");
 
-	constexpr auto lHourFactor = 1000 * 60 * 60;
-	unsigned long lHours = current_msec / lHourFactor;
-	unsigned long lRemainedMsec = current_msec % lHourFactor;
-
-	constexpr auto lMinuteFactor = 1000 * 60;
-	unsigned long lMinutes = lRemainedMsec / lMinuteFactor;
-	lRemainedMsec = lRemainedMsec % lMinuteFactor;
-
-	constexpr auto lSecondFactor = 1000;
-	unsigned long lSeconds = lRemainedMsec / lSecondFactor;
+	unsigned long lSeconds = (current_msec / 1000) % 60;
+	unsigned long lMinutes = (current_msec / (1000 * 60)) % 60; //WTF?????????????????????????????????????
+	unsigned long lHours = current_msec / (1000 * 60 * 60);
 	
 	constexpr int nBufferSize = 16;
 	char szBuffer[nBufferSize];
