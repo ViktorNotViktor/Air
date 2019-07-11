@@ -7,11 +7,15 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-#define INTERVAL_MSEC 10000
-unsigned long target_msec = INTERVAL_MSEC;
+constexpr unsigned long INTERVAL_MSEC = 10000;
 unsigned long current_msec = 0;
-
 unsigned long current_step = 0;
+
+int blink_zero = 0;
+unsigned long prev_zero_msec = 0;
+int blink_display_error = 0;
+unsigned long prev_display_error_msec = 0;
+#define BLINK_INTERVAL 200
 
 #define DHT22_DPIN 4
 DHT dht(DHT22_DPIN, DHT22);
@@ -37,6 +41,7 @@ int arrLevel[LED_CHANNEL_COUNT] =
 	};
 // TLC5940 pins
 int arrChannel[LED_CHANNEL_COUNT] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+#define BLINK_ZERO_LED_IDX 0
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 32 // OLED display height, in pixels
@@ -77,7 +82,7 @@ void setupMHZ19B()
 	mhz.begin(swSerial);
 	//mhz.setRange();
 	//mhz.setSpan();
-	mhz.autoCalibration(); //TODO: false
+	mhz.autoCalibration(false);
 }
 
 void setupDHT22()
@@ -95,7 +100,8 @@ void setupDisplay()
 {
 	if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3C for 128x32
 		Serial.println(F("SSD1306 allocation failed"));
-		for(;;); // Don't proceed, loop forever
+		//for(;;); // Don't proceed, loop forever
+		blink_display_error = 1;
 	}
 
 	display.clearDisplay();
@@ -107,8 +113,8 @@ void setupDisplay()
 
 void loop() 
 {
-	//delayAdjusted();
 	processButtons();
+	processBlink();
 
 	if(isIntervalElapsed())
 	{
@@ -146,54 +152,23 @@ void processButtons()
 	//mhz.calibrateZero();
 }
 
-#pragma region time
-
-void delayAdjusted()
+void processBlink()
 {
-	current_msec = millis();
-	long adjust_msec = target_msec - current_msec;
-	if(adjust_msec < -INTERVAL_MSEC / 2)
+	if(blink_zero != 0 && (current_msec - prev_zero_msec) > BLINK_INTERVAL)
 	{
-		adjust_msec = -INTERVAL_MSEC / 2;
+		Tlc.set(arrChannel[BLINK_ZERO_LED_IDX], blink_zero == 1 ? LED_LEVEL_MAX : LED_LEVEL_MIN);
+		Tlc.update();
+
+		prev_zero_msec = current_msec;
+		blink_zero *= -1;
 	}
-
-	/*Serial.print("target_msec=");
-	Serial.print(target_msec);
-	Serial.print(" msec=");
-	Serial.print(msec);
-	Serial.print(" adjust_msec=");
-	Serial.println(adjust_msec);*/
-
-
-	target_msec += INTERVAL_MSEC;
-	delay(INTERVAL_MSEC + adjust_msec);
-
-	/*unsigned long adjust_msec = msec - prev_msec;
-	if (adjust_msec > INTERVAL_MSEC)
-	{
-		adjust_msec -= INTERVAL_MSEC;
-	}
-	else
-	{
-		adjust_msec = 0;
-	}
-
-	prev_msec = msec;
-
-	delay(INTERVAL_MSEC - adjust_msec);*/
+	//TODO: check prev state of blink_zero to turn off LED
 }
+
+#pragma region time
 
 void printTimeStamp()
 {
-	/*Serial.println("WTF");
-	Serial.print(" current_step=");
-	Serial.print(current_step);
-	Serial.print(" current_msec=");
-	Serial.print(current_msec);
-	Serial.print(" mult=");
-	Serial.println(current_step * INTERVAL_MSEC);
-*/
-
 	Serial.print(millis() / 1000);
 	Serial.print(" sec, ");
 }
@@ -203,6 +178,7 @@ void printTimeStamp()
 void processMHZ19B(struct DataMHZ19B& data)
 {
 	data.nCO2 = mhz.getCO2();
+	blink_zero = (data.nCO2 == 0) ? -1 : 0; 
 }
 
 void printSerial(const struct DataMHZ19B& data)
@@ -273,9 +249,17 @@ void printDisplay(const struct DataMHZ19B& dataMHZ19B, const struct DataDHT22& d
 	display.print("% ");
 
 	unsigned long lSeconds = (current_msec / 1000) % 60;
-	unsigned long lMinutes = (current_msec / (1000 * 60)) % 60; //WTF?????????????????????????????????????
-	unsigned long lHours = current_msec / (1000 * 60 * 60);
+	unsigned long lMinutes = (current_msec / 1000 / 60) % 60;
+	unsigned long lHours = current_msec / 1000 / 60 / 60;
 	
+	/*Serial.print("WTF");
+	Serial.print(" current_msec=");
+	Serial.print(current_msec);
+	Serial.print(" /=");
+	Serial.print(current_msec / 1000 / 60);
+	Serial.print(" %=");
+	Serial.println((current_msec / 1000 / 60) % 60);
+*/
 	constexpr int nBufferSize = 16;
 	char szBuffer[nBufferSize];
 	snprintf(szBuffer, nBufferSize, "%02lu:%02lu:%02lu", lHours, lMinutes, lSeconds);
