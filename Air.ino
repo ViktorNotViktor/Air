@@ -19,6 +19,7 @@ unsigned long prev_display_error_msec = 0;
 
 #define DHT22_DPIN 4
 DHT dht(DHT22_DPIN, DHT22);
+#define DHT22_TEMP_CORRECTION -2
 
 #define MHZ19B_RX A0
 #define MHZ19B_TX A1
@@ -26,18 +27,31 @@ MHZ19 mhz;
 SoftwareSerial swSerial(MHZ19B_RX, MHZ19B_TX); // RX, TX
 
 #define LED_LEVEL_MIN 0
-#define LED_LEVEL_MAX 100
+#define LED_LEVEL_BLUE_MAX 80
+#define LED_LEVEL_GREEN_MAX 80
+#define LED_LEVEL_YELLOW_MAX 200
+#define LED_LEVEL_RED_MAX 200
 
 #define LED_CHANNEL_START_IDX 0
 #define LED_CHANNEL_END_IDX 9
 #define LED_CHANNEL_COUNT 10
 
 // CO2 PPM levels
-int arrLevel[LED_CHANNEL_COUNT] = 
-	{ 	0,					// blue, always on
-		500, 600, 700, 800,	// green
-		1000, 1300, 1600,	// yellow
-		2000, 3000			// red
+int arrLevel[LED_CHANNEL_COUNT][2] = 
+	{ 	// blue, always on
+		{0, LED_LEVEL_BLUE_MAX},
+		// green
+		{500, LED_LEVEL_GREEN_MAX},
+		{600, LED_LEVEL_GREEN_MAX},
+		{700, LED_LEVEL_GREEN_MAX},
+		{800, LED_LEVEL_GREEN_MAX},
+		// yellow
+		{1000, LED_LEVEL_YELLOW_MAX},
+		{1300, LED_LEVEL_YELLOW_MAX},
+		{1600, LED_LEVEL_YELLOW_MAX},
+		// red
+		{2000, LED_LEVEL_RED_MAX},
+		{3000, LED_LEVEL_RED_MAX},
 	};
 // TLC5940 pins
 int arrChannel[LED_CHANNEL_COUNT] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
@@ -98,9 +112,9 @@ void setupLED()
 
 void setupDisplay()
 {
-	if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3C for 128x32
+	if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) // Address 0x3C for 128x32
+	{
 		Serial.println(F("SSD1306 allocation failed"));
-		//for(;;); // Don't proceed, loop forever
 		blink_display_error = 1;
 	}
 
@@ -156,7 +170,7 @@ void processBlink()
 {
 	if(blink_zero != 0 && (current_msec - prev_zero_msec) > BLINK_INTERVAL)
 	{
-		Tlc.set(arrChannel[BLINK_ZERO_LED_IDX], blink_zero == 1 ? LED_LEVEL_MAX : LED_LEVEL_MIN);
+		Tlc.set(arrChannel[BLINK_ZERO_LED_IDX], blink_zero == 1 ? arrLevel[BLINK_ZERO_LED_IDX][1] : LED_LEVEL_MIN);
 		Tlc.update();
 
 		prev_zero_msec = current_msec;
@@ -193,7 +207,7 @@ void printSerial(const struct DataMHZ19B& data)
 void processDHT22(struct DataDHT22& data)
 {
 	// Temperature, humidity
-	data.fTemp = dht.readTemperature();
+	data.fTemp = dht.readTemperature() + DHT22_TEMP_CORRECTION; // :D
 	data.fHum = dht.readHumidity();
 }
 
@@ -212,9 +226,9 @@ void printLED(const struct DataMHZ19B& data)
 {
 	for(int i = LED_CHANNEL_START_IDX; i <= LED_CHANNEL_END_IDX; ++i)
 	{
-		if(arrLevel[i] < data.nCO2)
+		if(arrLevel[i][0] < data.nCO2)
 		{
-			Tlc.set(arrChannel[i], LED_LEVEL_MAX);
+			Tlc.set(arrChannel[i], arrLevel[i][1]);
 		}
 		else
 		{
