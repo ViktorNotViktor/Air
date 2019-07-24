@@ -21,6 +21,10 @@ unsigned long prev_display_error_msec = 0;
 DHT dht(DHT22_DPIN, DHT22);
 #define DHT22_TEMP_CORRECTION -2
 
+#define CALIBRATE_PIN 2
+constexpr unsigned long HOLD_TO_CALIBRATE_MSEC = 5000;
+unsigned long start_hold_calibrate = 0;
+
 #define MHZ19B_RX A0
 #define MHZ19B_TX A1
 MHZ19 mhz;
@@ -80,7 +84,7 @@ struct DataDHT22
 #pragma region setup
 void setup()
 {
-	delay(1000);
+	delay(2000);
 
 	Serial.begin(9600);
 	swSerial.begin(9600);
@@ -89,13 +93,12 @@ void setup()
 	setupDisplay();
 	setupMHZ19B();
 	setupDHT22();
+	setupButtons();
 }
 
 void setupMHZ19B()
 {
 	mhz.begin(swSerial);
-	//mhz.setRange();
-	//mhz.setSpan();
 	mhz.autoCalibration(false);
 }
 
@@ -123,11 +126,20 @@ void setupDisplay()
 	display.display();
 }
 
+void setupButtons()
+{
+	pinMode(CALIBRATE_PIN, INPUT_PULLUP);
+}
+
 #pragma endregion
 
 void loop() 
 {
-	processButtons();
+	if(!processButtons())
+	{
+		return;
+	}
+
 	processBlink();
 
 	if(isIntervalElapsed())
@@ -160,10 +172,47 @@ bool isIntervalElapsed()
 	return bResult;
 }
 
-void processButtons()
+bool processButtons()
 {
-	//TODO: if "Calibrate" button pressed
-	//mhz.calibrateZero();
+	if(LOW == digitalRead(CALIBRATE_PIN))
+	{
+		display.clearDisplay();
+		display.setTextSize(1);
+		display.setCursor(0, 0);
+		display.setTextColor(WHITE);
+
+		if(start_hold_calibrate == 0)
+		{
+			start_hold_calibrate = millis();
+		}
+
+		if(millis() - start_hold_calibrate < HOLD_TO_CALIBRATE_MSEC)
+		{
+			display.print("Hold ");
+			display.print(HOLD_TO_CALIBRATE_MSEC / 1000);
+			display.print(" seconds to calibrate 400 PPM CO2 level...");
+			display.display();
+		}
+		else
+		{
+			mhz.setRange(2000); //TODO: 5000?                 
+			mhz.calibrateZero();      
+			mhz.setSpan(2000); //TODO: 5000? Library author strongly recommends 2000. 
+
+			display.print("CALIBRATED!");
+			display.display();
+			start_hold_calibrate = 0;
+			delay(5000); // no calibration in next 5 seconds
+		}
+
+		return false;
+	}
+	else
+	{
+		start_hold_calibrate = 0;
+	}
+	
+	return true;
 }
 
 void processBlink()
