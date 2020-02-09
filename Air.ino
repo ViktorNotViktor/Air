@@ -25,6 +25,9 @@ DHT dht(DHT22_DPIN, DHT22);
 constexpr unsigned long HOLD_TO_CALIBRATE_MSEC = 5000;
 unsigned long start_hold_calibrate = 0;
 
+#define AUTO_CALIBRATE_PIN 7 //TODO: ?
+bool auto_calibrate = false;
+
 #define MHZ19B_RX A0
 #define MHZ19B_TX A1
 MHZ19 mhz;
@@ -42,17 +45,17 @@ SoftwareSerial swSerial(MHZ19B_RX, MHZ19B_TX); // RX, TX
 
 // CO2 PPM levels
 int arrLevel[LED_CHANNEL_COUNT][2] = 
-	{ 	// blue, always on
-		{0, LED_LEVEL_BLUE_MAX},
+	{ 	// blue
+		{1, LED_LEVEL_BLUE_MAX},
 		// green
+		{1, LED_LEVEL_GREEN_MAX},
 		{500, LED_LEVEL_GREEN_MAX},
 		{600, LED_LEVEL_GREEN_MAX},
 		{700, LED_LEVEL_GREEN_MAX},
-		{800, LED_LEVEL_GREEN_MAX},
 		// yellow
+		{800, LED_LEVEL_YELLOW_MAX},
 		{1000, LED_LEVEL_YELLOW_MAX},
-		{1300, LED_LEVEL_YELLOW_MAX},
-		{1600, LED_LEVEL_YELLOW_MAX},
+		{1500, LED_LEVEL_YELLOW_MAX},
 		// red
 		{2000, LED_LEVEL_RED_MAX},
 		{3000, LED_LEVEL_RED_MAX},
@@ -98,8 +101,14 @@ void setup()
 
 void setupMHZ19B()
 {
+	pinMode(AUTO_CALIBRATE_PIN, INPUT_PULLUP);
+	if(LOW == digitalRead(AUTO_CALIBRATE_PIN))
+	{
+		auto_calibrate = true;
+	}
+
 	mhz.begin(swSerial);
-	mhz.autoCalibration(false);
+	mhz.autoCalibration(auto_calibrate);
 }
 
 void setupDHT22()
@@ -186,23 +195,32 @@ bool processButtons()
 			start_hold_calibrate = millis();
 		}
 
-		if(millis() - start_hold_calibrate < HOLD_TO_CALIBRATE_MSEC)
+		if(auto_calibrate)
 		{
-			display.print("Hold ");
-			display.print(HOLD_TO_CALIBRATE_MSEC / 1000);
-			display.print(" seconds to calibrate 400 PPM CO2 level...");
-			display.display();
+			// It seems that this string does not fit in memory.
+			//display.print("Can't calibrate baseline when autocalibrating is ON");
+			//display.display();
 		}
 		else
 		{
-			mhz.setRange(2000); //TODO: 5000?                 
-			mhz.calibrateZero();      
-			mhz.setSpan(2000); //TODO: 5000? Library author strongly recommends 2000. 
+			if(millis() - start_hold_calibrate < HOLD_TO_CALIBRATE_MSEC)
+			{
+				display.print("Hold ");
+				display.print(HOLD_TO_CALIBRATE_MSEC / 1000);
+				display.print(" seconds to calibrate 400 PPM CO2 level...");
+				display.display();
+			}
+			else
+			{
+				mhz.setRange(2000); //TODO: 5000?                 
+				mhz.calibrateZero();      
+				mhz.setSpan(2000); //TODO: 5000? Library author strongly recommends 2000. 
 
-			display.print("CALIBRATED!");
-			display.display();
-			start_hold_calibrate = 0;
-			delay(5000); // no calibration in next 5 seconds
+				display.print("CALIBRATED!");
+				display.display();
+				start_hold_calibrate = 0;
+				delay(5000); // no calibration in next 5 seconds
+			}
 		}
 
 		return false;
@@ -302,7 +320,15 @@ void printDisplay(const struct DataMHZ19B& dataMHZ19B, const struct DataDHT22& d
 	int x = display.getCursorX();
 	int y = display.getCursorY();
 	display.setTextSize(1);
-	display.print("CO2");
+	display.print("CO2 ");
+
+	if(auto_calibrate)
+	{
+		display.setTextColor(BLACK, WHITE);
+		display.print("AUTO");
+		display.setTextColor(WHITE);
+	}
+
 	display.setCursor(x, y + 8);
 	display.println("PPM\n");
 
@@ -378,6 +404,4 @@ and GND.
 This library uses the PWM output ability of digital pins 3, 9, 10, and 11.
 Do not use analogWrite(...) on these pins.
 
-This sketch does the Knight Rider strobe across a line of LEDs.
-
-Alex Leone <acleone ~AT~ gmail.com>, 2009-02-03 */
+ */
